@@ -1,0 +1,471 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#3367d6">
+<title>Images to PDF (Offline)</title>
+<style>
+:root{--bg:#f4f6fb;--card:#fff;--tx:#1b2330;--mut:#667085;--ac:#3367d6;--ac2:#254fa8;--bd:#d9dfeb;--ok:#1a8f4c;--err:#c0392b}
+@media (prefers-color-scheme:dark){:root{--bg:#10141c;--card:#1a2130;--tx:#e8ecf4;--mut:#93a0b8;--bd:#2b3550;--ac:#5b8def;--ac2:#7aa3ff}}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--tx);font:15px/1.4 system-ui,-apple-system,Roboto,Arial,sans-serif;padding-bottom:40px}
+header{background:var(--ac);color:#fff;padding:14px 16px}
+header h1{margin:0;font-size:19px}
+header p{margin:2px 0 0;font-size:12.5px;opacity:.9}
+main{max-width:900px;margin:0 auto;padding:12px}
+.drop{border:2px dashed var(--ac);border-radius:14px;background:var(--card);text-align:center;padding:26px 12px;cursor:pointer}
+.drop.over{background:rgba(51,103,214,.12)}
+.drop b{display:block;font-size:17px;margin-bottom:4px}
+.drop span{color:var(--mut);font-size:13px}
+button,.btn{font:inherit;border:0;border-radius:10px;padding:10px 14px;background:var(--ac);color:#fff;cursor:pointer}
+button:active{background:var(--ac2)}
+button.sec{background:transparent;color:var(--ac);border:1px solid var(--bd)}
+button:disabled{opacity:.5}
+.bar{display:flex;gap:8px;align-items:center;justify-content:space-between;margin:14px 0 8px;flex-wrap:wrap}
+.bar .cnt{color:var(--mut);font-size:13px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:10px}
+.item{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:6px;position:relative}
+.item.drag{opacity:.4}
+.item .n{position:absolute;top:8px;left:8px;background:rgba(0,0,0,.65);color:#fff;border-radius:9px;font-size:11px;padding:1px 7px;z-index:1}
+.th{height:120px;display:flex;align-items:center;justify-content:center;background:rgba(127,127,127,.12);border-radius:8px;overflow:hidden}
+.th img{max-width:100%;max-height:100%;display:block}
+.nm{font-size:11px;color:var(--mut);margin:4px 2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.act{display:flex;gap:4px}
+.act button{flex:1;padding:6px 0;font-size:15px;background:transparent;color:var(--tx);border:1px solid var(--bd)}
+.act button.del{color:var(--err)}
+.panel{background:var(--card);border:1px solid var(--bd);border-radius:14px;padding:12px;margin-top:14px}
+.panel h2{margin:0 0 8px;font-size:15px}
+.row{display:flex;flex-wrap:wrap;gap:10px}
+.f{flex:1 1 150px;min-width:130px}
+.f label{display:block;font-size:12px;color:var(--mut);margin-bottom:3px}
+select,input[type=number],input[type=text]{width:100%;font:inherit;padding:9px;border-radius:9px;border:1px solid var(--bd);background:var(--bg);color:var(--tx)}
+.sub{display:flex;gap:6px;margin-top:6px}
+.hide{display:none!important}
+#go{width:100%;margin-top:14px;padding:14px;font-size:16px;font-weight:600}
+.prog{height:8px;background:var(--bd);border-radius:5px;overflow:hidden;margin-top:12px}
+.prog i{display:block;height:100%;width:0;background:var(--ac);transition:width .15s}
+#msg{margin-top:8px;font-size:13px;color:var(--mut);white-space:pre-wrap}
+#msg.err{color:var(--err)}
+.res{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.res a{text-decoration:none;display:inline-block}
+.note{font-size:12px;color:var(--mut);margin-top:8px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Images to PDF</h1>
+  <p>Works offline &bull; nothing is uploaded &bull; original image quality is kept</p>
+</header>
+<main>
+  <div class="drop" id="drop" tabindex="0">
+    <b>Tap to choose images</b>
+    <span>JPG, PNG, WEBP, GIF, BMP, AVIF (as supported by your browser) &mdash; or drop files here</span>
+  </div>
+  <input id="file" type="file" accept="image/*" multiple class="hide">
+
+  <div id="listWrap" class="hide">
+    <div class="bar">
+      <span class="cnt" id="cnt"></span>
+      <span>
+        <button class="sec" id="addMore">+ Add</button>
+        <button class="sec" id="clear">Clear</button>
+      </span>
+    </div>
+    <div class="grid" id="grid"></div>
+    <div class="note">Use &#9664; &#9654; to reorder (or drag on a computer), &#10227; to rotate, &#10005; to remove.</div>
+  </div>
+
+  <div class="panel">
+    <h2>PDF settings</h2>
+    <div class="row">
+      <div class="f">
+        <label for="size">Page size</label>
+        <select id="size">
+          <option>A0</option><option>A1</option><option>A2</option><option>A3</option>
+          <option selected>A4</option><option>A5</option><option>A6</option>
+          <option>Letter</option><option>Legal</option>
+          <option value="dpi">Use DPI (image size)</option>
+          <option value="custom">Custom</option>
+        </select>
+        <div class="sub hide" id="dpiBox"><input id="dpi" type="number" min="10" max="2400" value="150" aria-label="DPI"></div>
+        <div class="sub hide" id="custBox">
+          <input id="cw" type="number" min="1" value="210" aria-label="width">
+          <input id="ch" type="number" min="1" value="297" aria-label="height">
+          <select id="cu" style="width:80px"><option value="mm">mm</option><option value="in">inch</option></select>
+        </div>
+      </div>
+      <div class="f">
+        <label for="orient">Orientation</label>
+        <select id="orient"><option value="auto">Automatic</option><option value="portrait">Portrait</option><option value="landscape">Landscape</option></select>
+      </div>
+      <div class="f">
+        <label for="margin">Margin</label>
+        <select id="margin">
+          <option value="0">No margin</option><option value="5">5 mm</option><option value="10">10 mm</option>
+          <option value="15">15 mm</option><option value="20">20 mm</option><option value="25">25 mm</option>
+          <option value="custom">Custom</option>
+        </select>
+        <div class="sub hide" id="mgBox">
+          <input id="mv" type="number" min="0" step="0.5" value="10" aria-label="margin">
+          <select id="mu" style="width:80px"><option value="mm">mm</option><option value="in">inch</option></select>
+        </div>
+      </div>
+      <div class="f">
+        <label for="qual">Image quality</label>
+        <select id="qual">
+          <option value="lossless">Original &ndash; lossless (best)</option>
+          <option value="92">Smaller file &ndash; JPEG 92%</option>
+          <option value="80">Smallest file &ndash; JPEG 80%</option>
+        </select>
+      </div>
+      <div class="f" style="flex-basis:100%">
+        <label for="fname">File name</label>
+        <input id="fname" type="text" value="images.pdf">
+      </div>
+    </div>
+    <button id="go" disabled>Create PDF</button>
+    <div class="prog hide" id="prog"><i id="bar"></i></div>
+    <div id="msg"></div>
+    <div class="res hide" id="res"></div>
+  </div>
+  <div class="note">JPEG photos are embedded byte-for-byte (no re-compression). Other formats are stored losslessly. TIFF and HEIC only work if your browser can display them.</div>
+</main>
+
+<script>
+"use strict";
+/*CORE*/
+var EX={1:[1,0,0,1],2:[-1,0,0,1],3:[-1,0,0,-1],4:[1,0,0,-1],5:[0,-1,-1,0],6:[0,1,-1,0],7:[0,1,1,0],8:[0,-1,1,0]};
+var RO={0:[1,0,0,1],90:[0,1,-1,0],180:[-1,0,0,-1],270:[0,-1,1,0]};
+function mul(R,E){return [R[0]*E[0]+R[1]*E[2],R[0]*E[1]+R[1]*E[3],R[2]*E[0]+R[3]*E[2],R[2]*E[1]+R[3]*E[3]];}
+var SIZES={A0:[841,1189],A1:[594,841],A2:[420,594],A3:[297,420],A4:[210,297],A5:[148,210],A6:[105,148],Letter:[215.9,279.4],Legal:[215.9,355.6]};
+var PT=72/25.4;
+
+function exifOrient(u8,s){
+  var le=u8[s]===0x49;
+  function g16(o){return le?(u8[o]|(u8[o+1]<<8)):((u8[o]<<8)|u8[o+1]);}
+  function g32(o){return le?(u8[o]|(u8[o+1]<<8)|(u8[o+2]<<16)|(u8[o+3]<<24)):((u8[o]<<24)|(u8[o+1]<<16)|(u8[o+2]<<8)|u8[o+3]);}
+  var p=s+g32(s+4);
+  if(p<0||p+2>u8.length)return 1;
+  var n=g16(p);p+=2;
+  for(var k=0;k<n;k++,p+=12){
+    if(p+12>u8.length)break;
+    if(g16(p)===0x0112){var v=g16(p+8);return(v>=1&&v<=8)?v:1;}
+  }
+  return 1;
+}
+function parseJpeg(u8){
+  if(u8.length<4||u8[0]!==0xFF||u8[1]!==0xD8)return null;
+  var i=2,info={exif:1,adobe:false};
+  while(i+4<u8.length){
+    if(u8[i]!==0xFF){i++;continue;}
+    var m=u8[i+1];
+    if(m===0xFF){i++;continue;}
+    if(m===0xD8||m===0x01||(m>=0xD0&&m<=0xD7)){i+=2;continue;}
+    if(m===0xD9||m===0xDA)break;
+    var len=(u8[i+2]<<8)|u8[i+3];
+    if(m===0xE1&&len>=16&&u8[i+4]===0x45&&u8[i+5]===0x78&&u8[i+6]===0x69&&u8[i+7]===0x66){info.exif=exifOrient(u8,i+10);}
+    if(m===0xEE&&len>=14&&u8[i+4]===0x41&&u8[i+5]===0x64&&u8[i+6]===0x6F&&u8[i+7]===0x62&&u8[i+8]===0x65)info.adobe=true;
+    if(m>=0xC0&&m<=0xCF&&m!==0xC4&&m!==0xC8&&m!==0xCC){
+      info.sof=m;info.prec=u8[i+4];info.h=(u8[i+5]<<8)|u8[i+6];info.w=(u8[i+7]<<8)|u8[i+8];info.comps=u8[i+9];
+    }
+    i+=2+len;
+  }
+  return info.w?info:null;
+}
+function jpegPassable(j){
+  return !!j&&j.prec===8&&(j.sof===0xC0||j.sof===0xC1||j.sof===0xC2)&&(j.comps===1||j.comps===3||j.comps===4)&&j.w>0&&j.h>0;
+}
+function enc(s){var a=new Uint8Array(s.length);for(var i=0;i<s.length;i++)a[i]=s.charCodeAt(i)&255;return a;}
+function adler32(u8){
+  var a=1,b=0,n=u8.length,i=0;
+  while(i<n){var e=Math.min(i+5552,n);for(;i<e;i++){a+=u8[i];b+=a;}a%=65521;b%=65521;}
+  return ((b<<16)|a)>>>0;
+}
+function storedZlib(u8){
+  var n=u8.length,blocks=Math.max(1,Math.ceil(n/65535));
+  var out=new Uint8Array(2+n+blocks*5+4),o=0,p=0;
+  out[o++]=0x78;out[o++]=0x01;
+  for(var b=0;b<blocks;b++){
+    var l=Math.min(65535,n-p);
+    out[o++]=(b===blocks-1)?1:0;
+    out[o++]=l&255;out[o++]=(l>>8)&255;out[o++]=(~l)&255;out[o++]=((~l)>>8)&255;
+    out.set(u8.subarray(p,p+l),o);o+=l;p+=l;
+  }
+  var ad=adler32(u8);
+  out[o++]=(ad>>>24)&255;out[o++]=(ad>>>16)&255;out[o++]=(ad>>>8)&255;out[o++]=ad&255;
+  return out;
+}
+async function deflate(u8){
+  try{
+    if(typeof CompressionStream==='function'&&typeof Response==='function'&&typeof Blob.prototype.stream==='function'){
+      var s=new Blob([u8]).stream().pipeThrough(new CompressionStream('deflate'));
+      return new Uint8Array(await new Response(s).arrayBuffer());
+    }
+  }catch(e){}
+  return storedZlib(u8);
+}
+function fx(n){return(Math.round(n*10000)/10000).toString();}
+
+/* page geometry. dw,dh = displayed image size in pixels */
+function pageGeom(dw,dh,cfg){
+  var mg=cfg.marginMm*PT,pw,ph,scale;
+  if(cfg.size==='dpi'){
+    var s=72/cfg.dpi;pw=dw*s+2*mg;ph=dh*s+2*mg;scale=s;
+  }else{
+    var a,b;
+    if(cfg.size==='custom'){a=cfg.cwMm*PT;b=cfg.chMm*PT;}
+    else{a=SIZES[cfg.size][0]*PT;b=SIZES[cfg.size][1]*PT;}
+    var lo=Math.min(a,b),hi=Math.max(a,b);
+    var land=cfg.orient==='auto'?dw>dh:cfg.orient==='landscape';
+    pw=land?hi:lo;ph=land?lo:hi;
+    var aw=pw-2*mg,ah=ph-2*mg;
+    if(aw<=1||ah<=1)throw new Error('Margin is too large for this page size.');
+    scale=Math.min(aw/dw,ah/dh);
+  }
+  return {pw:pw,ph:ph,w:dw*scale,h:dh*scale,cx:pw/2,cy:ph/2};
+}
+
+/* PDF writer: parts are flushed to Blobs to keep memory low */
+function PdfW(){this.parts=[];this.blobs=[];this.pos=0;this.offs=[];this.n=2;}
+PdfW.prototype.raw=function(x){var u=typeof x==='string'?enc(x):x;this.parts.push(u);this.pos+=u.length;};
+PdfW.prototype.flush=function(){if(this.parts.length){this.blobs.push(new Blob(this.parts));this.parts=[];}};
+PdfW.prototype.obj=function(id,dict,stream){
+  this.offs[id]=this.pos;this.raw(id+' 0 obj\n');
+  if(stream){this.raw('<<'+dict+' /Length '+stream.length+'>>\nstream\n');this.raw(stream);this.raw('\nendstream\nendobj\n');}
+  else this.raw('<<'+dict+'>>\nendobj\n');
+};
+PdfW.prototype.alloc=function(){return ++this.n;};
+
+/* prepFn(item) -> {w,h,cs,bpc,filter,data,decode,alpha,exif}  (stored pixel size w,h) */
+async function buildPdf(items,cfg,prepFn,progress){
+  var W=new PdfW(),kids=[];
+  W.raw('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+  for(var i=0;i<items.length;i++){
+    var it=items[i];
+    if(progress)progress(i,items.length,it);
+    var im=await prepFn(it);
+    var M=mul(RO[it.rot||0],EX[im.exif||1]);
+    var swap=M[0]===0;
+    var dw=swap?im.h:im.w,dh=swap?im.w:im.h;
+    var g=pageGeom(dw,dh,cfg);
+    var Sw=swap?g.h:g.w,Sh=swap?g.w:g.h;
+    var A=M[0]*Sw,C=M[1]*Sh,B=M[2]*Sw,D=M[3]*Sh;
+    var E=g.cx-(M[0]*Sw+M[1]*Sh)/2,F=g.cy-(M[2]*Sw+M[3]*Sh)/2;
+    var pid=W.alloc(),cid=W.alloc(),iid=W.alloc(),sid=0;
+    if(im.alpha)sid=W.alloc();
+    var content='q '+[A,B,C,D,E,F].map(fx).join(' ')+' cm /Im0 Do Q';
+    W.obj(pid,'/Type /Page /Parent 2 0 R /MediaBox [0 0 '+fx(g.pw)+' '+fx(g.ph)+'] /Resources << /XObject << /Im0 '+iid+' 0 R >> >> /Contents '+cid+' 0 R');
+    W.obj(cid,'',enc(content));
+    var d='/Type /XObject /Subtype /Image /Width '+im.w+' /Height '+im.h+' /ColorSpace /'+im.cs+' /BitsPerComponent '+im.bpc+' /Filter /'+im.filter;
+    if(im.decode)d+=' /Decode ['+im.decode+']';
+    if(sid)d+=' /SMask '+sid+' 0 R';
+    W.obj(iid,d,im.data);
+    if(sid)W.obj(sid,'/Type /XObject /Subtype /Image /Width '+im.w+' /Height '+im.h+' /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode',im.alpha);
+    kids.push(pid+' 0 R');
+    im=null;
+    W.flush();
+  }
+  W.obj(1,'/Type /Catalog /Pages 2 0 R');
+  W.obj(2,'/Type /Pages /Count '+kids.length+' /Kids ['+kids.join(' ')+']');
+  var xr=W.pos,total=W.n+1,x='xref\n0 '+total+'\n0000000000 65535 f \n';
+  for(var k=1;k<total;k++)x+=('0000000000'+W.offs[k]).slice(-10)+' 00000 n \n';
+  x+='trailer\n<< /Size '+total+' /Root 1 0 R /Producer (Offline Images to PDF) >>\nstartxref\n'+xr+'\n%%EOF\n';
+  W.raw(x);W.flush();
+  return new Blob(W.blobs,{type:'application/pdf'});
+}
+/*ENDCORE*/
+
+/* ---------------- browser-only part ---------------- */
+if(typeof document!=='undefined'){
+(function(){
+var $=function(id){return document.getElementById(id);};
+var items=[],busy=false,resUrl=null;
+
+var CAP=window.Capacitor,NATIVE=!!(CAP&&CAP.isNativePlatform&&CAP.isNativePlatform());
+function blobB64(b){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(String(r.result).split(',')[1]);};r.onerror=function(){rej(r.error);};r.readAsDataURL(b);});}
+async function nativeSave(blob,name,shareIt){
+  var P=CAP.Plugins,FS=P.Filesystem,SH=P.Share,data=await blobB64(blob);
+  if(shareIt){var w=await FS.writeFile({path:name,data:data,directory:'CACHE'});await SH.share({title:name,url:w.uri,dialogTitle:'Share PDF'});return 'Shared.';}
+  try{await FS.requestPermissions();}catch(e){}
+  await FS.writeFile({path:'ImagesToPDF/'+name,data:data,directory:'DOCUMENTS',recursive:true});
+  return 'Saved to Documents/ImagesToPDF/'+name;
+}
+var AUTO_ORIENT='imageOrientation' in document.documentElement.style;
+
+function readAB(blob){return new Promise(function(res,rej){var r=new FileReader();r.onload=function(){res(r.result);};r.onerror=function(){rej(r.error);};r.readAsArrayBuffer(blob);});}
+function loadImg(file){return new Promise(function(res,rej){
+  var u=URL.createObjectURL(file),im=new Image();
+  im.onload=function(){res({im:im,u:u});};
+  im.onerror=function(){URL.revokeObjectURL(u);rej(new Error('Cannot read "'+file.name+'" (format not supported by this browser).'));};
+  im.src=u;
+});}
+function setMsg(t,err){var m=$('msg');m.textContent=t||'';m.className=err?'err':'';}
+
+/* ---- adding files ---- */
+async function addFiles(list){
+  var files=Array.prototype.slice.call(list).filter(function(f){return /^image\//.test(f.type)||/\.(jpe?g|png|gif|webp|bmp|avif|tiff?|heic|heif)$/i.test(f.name);});
+  if(!files.length){setMsg('No image files selected.',true);return;}
+  setMsg('Loading '+files.length+' image(s)...');
+  var bad=[];
+  for(var i=0;i<files.length;i++){
+    var f=files[i];
+    try{
+      var jpeg=null;
+      var head=new Uint8Array(await readAB(f.slice(0,Math.min(f.size,262144))));
+      if(head[0]===0xFF&&head[1]===0xD8){jpeg=parseJpeg(head);if(!jpeg){/* SOF beyond 256KB: parse whole */jpeg=parseJpeg(new Uint8Array(await readAB(f)));}}
+      var l=await loadImg(f);
+      var tw=l.im.naturalWidth,th=l.im.naturalHeight,sc=Math.min(1,300/Math.max(tw,th));
+      var c=document.createElement('canvas');c.width=Math.max(1,Math.round(tw*sc));c.height=Math.max(1,Math.round(th*sc));
+      var cx=c.getContext('2d');cx.fillStyle='#fff';cx.fillRect(0,0,c.width,c.height);cx.drawImage(l.im,0,0,c.width,c.height);
+      URL.revokeObjectURL(l.u);l.im=null;
+      items.push({file:f,name:f.name,jpeg:jpeg,rot:0,thumb0:c,thumb:c.toDataURL('image/jpeg',0.75)});
+    }catch(e){bad.push(f.name);}
+    if(i%3===2)render();
+  }
+  render();
+  setMsg(bad.length?('Skipped (unsupported): '+bad.join(', ')):'',!!bad.length);
+}
+
+/* ---- list rendering ---- */
+function rotThumb(it){
+  var s=it.thumb0,r=it.rot;
+  if(!r){it.thumb=s.toDataURL('image/jpeg',0.75);return;}
+  var c=document.createElement('canvas'),sw=r===180?s.width:s.height,sh=r===180?s.height:s.width;
+  c.width=sw;c.height=sh;var x=c.getContext('2d');x.translate(sw/2,sh/2);x.rotate(r*Math.PI/180);x.drawImage(s,-s.width/2,-s.height/2);
+  it.thumb=c.toDataURL('image/jpeg',0.75);
+}
+function mv(i,d){var j=i+d;if(j<0||j>=items.length)return;var t=items[i];items[i]=items[j];items[j]=t;render();}
+var dragFrom=-1;
+function render(){
+  var g=$('grid');g.innerHTML='';
+  $('listWrap').className=items.length?'':'hide';
+  $('go').disabled=!items.length||busy;
+  $('cnt').textContent=items.length+' image'+(items.length===1?'':'s');
+  items.forEach(function(it,i){
+    var d=document.createElement('div');d.className='item';d.draggable=true;
+    d.addEventListener('dragstart',function(e){dragFrom=i;d.classList.add('drag');try{e.dataTransfer.setData('text/plain',String(i));}catch(x){}});
+    d.addEventListener('dragend',function(){d.classList.remove('drag');});
+    d.addEventListener('dragover',function(e){e.preventDefault();});
+    d.addEventListener('drop',function(e){e.preventDefault();e.stopPropagation();if(dragFrom<0||dragFrom===i)return;var m=items.splice(dragFrom,1)[0];items.splice(i,0,m);dragFrom=-1;render();});
+    var n=document.createElement('span');n.className='n';n.textContent=String(i+1);
+    var th=document.createElement('div');th.className='th';var im=document.createElement('img');im.src=it.thumb;im.alt='';th.appendChild(im);
+    var nm=document.createElement('div');nm.className='nm';nm.textContent=it.name;nm.title=it.name;
+    var a=document.createElement('div');a.className='act';
+    [['\u25C0','Move earlier',function(){mv(i,-1);}],['\u25B6','Move later',function(){mv(i,1);}],['\u27F3','Rotate',function(){it.rot=(it.rot+90)%360;rotThumb(it);render();}],['\u2715','Remove',function(){items.splice(i,1);render();},'del']].forEach(function(b){
+      var bt=document.createElement('button');bt.type='button';bt.textContent=b[0];bt.title=b[1];bt.setAttribute('aria-label',b[1]);if(b[3])bt.className=b[3];bt.addEventListener('click',b[2]);a.appendChild(bt);
+    });
+    d.appendChild(n);d.appendChild(th);d.appendChild(nm);d.appendChild(a);g.appendChild(d);
+  });
+}
+
+/* ---- preparing one image for the PDF ---- */
+async function prep(it,qual){
+  var u8=null;
+  if(qual==='lossless'&&it.jpeg&&jpegPassable(it.jpeg)){
+    u8=new Uint8Array(await readAB(it.file));
+    var j=it.jpeg;
+    return {w:j.w,h:j.h,cs:j.comps===1?'DeviceGray':(j.comps===3?'DeviceRGB':'DeviceCMYK'),bpc:8,filter:'DCTDecode',data:u8,
+            decode:(j.comps===4&&j.adobe)?'1 0 1 0 1 0 1 0':null,alpha:null,exif:j.exif};
+  }
+  var l=await loadImg(it.file),im=l.im,w=im.naturalWidth,h=im.naturalHeight;
+  var c=document.createElement('canvas');c.width=w;c.height=h;
+  var cx=c.getContext('2d');
+  if(qual!=='lossless'){cx.fillStyle='#fff';cx.fillRect(0,0,w,h);}
+  cx.drawImage(im,0,0);
+  URL.revokeObjectURL(l.u);im.src='';
+  var exif=(it.jpeg&&!AUTO_ORIENT)?it.jpeg.exif:1;
+  if(exif>=5&&!AUTO_ORIENT){/* canvas holds stored (unrotated) pixels */}
+  if(qual!=='lossless'){
+    var url=c.toDataURL('image/jpeg',parseInt(qual,10)/100);
+    var b=atob(url.split(',')[1]),a=new Uint8Array(b.length);for(var i=0;i<b.length;i++)a[i]=b.charCodeAt(i);
+    c.width=c.height=1;
+    return {w:w,h:h,cs:'DeviceRGB',bpc:8,filter:'DCTDecode',data:a,decode:null,alpha:null,exif:exif};
+  }
+  var px=cx.getImageData(0,0,w,h).data,n=w*h,rgb=new Uint8Array(n*3),hasA=false,k=0,p=0;
+  for(var q=0;q<n;q++,p+=4,k+=3){rgb[k]=px[p];rgb[k+1]=px[p+1];rgb[k+2]=px[p+2];if(px[p+3]!==255)hasA=true;}
+  var alpha=null;
+  if(hasA){var al=new Uint8Array(n);for(var z=0,y=3;z<n;z++,y+=4)al[z]=px[y];alpha=await deflate(al);}
+  px=null;c.width=c.height=1;
+  var data=await deflate(rgb);
+  return {w:w,h:h,cs:'DeviceRGB',bpc:8,filter:'FlateDecode',data:data,decode:null,alpha:alpha,exif:exif};
+}
+
+/* ---- settings ---- */
+var KEY='img2pdf.settings.v1',ids=['size','dpi','cw','ch','cu','orient','margin','mv','mu','qual'];
+function toggles(){
+  $('dpiBox').className='sub'+($('size').value==='dpi'?'':' hide');
+  $('custBox').className='sub'+($('size').value==='custom'?'':' hide');
+  $('mgBox').className='sub'+($('margin').value==='custom'?'':' hide');
+  $('orient').disabled=$('size').value==='dpi';
+}
+function saveS(){try{var o={};ids.forEach(function(i){o[i]=$(i).value;});localStorage.setItem(KEY,JSON.stringify(o));}catch(e){}}
+function loadS(){try{var o=JSON.parse(localStorage.getItem(KEY)||'null');if(o)ids.forEach(function(i){if(o[i]!=null)$(i).value=o[i];});}catch(e){}toggles();}
+ids.forEach(function(i){$(i).addEventListener('change',function(){toggles();saveS();});});
+function cfg(){
+  var u=function(v,unit){return parseFloat(v)*(unit==='in'?25.4:1);};
+  var mm=$('margin').value==='custom'?u($('mv').value,$('mu').value):parseFloat($('margin').value);
+  var c={size:$('size').value,orient:$('orient').value,dpi:parseFloat($('dpi').value)||150,marginMm:isFinite(mm)&&mm>0?mm:0,
+         cwMm:u($('cw').value,$('cu').value),chMm:u($('ch').value,$('cu').value)};
+  if(c.size==='custom'&&!(c.cwMm>0&&c.chMm>0))throw new Error('Enter a valid custom page size.');
+  return c;
+}
+
+/* ---- create ---- */
+$('go').addEventListener('click',async function(){
+  if(busy||!items.length)return;
+  var c;try{c=cfg();}catch(e){setMsg(e.message,true);return;}
+  busy=true;$('go').disabled=true;$('res').className='res hide';$('res').innerHTML='';
+  if(resUrl){URL.revokeObjectURL(resUrl);resUrl=null;}
+  $('prog').className='prog';$('bar').style.width='0';setMsg('');
+  var qual=$('qual').value;
+  try{
+    var blob=await buildPdf(items,c,function(it){return prep(it,qual);},function(i,n,it){
+      $('bar').style.width=Math.round(i/n*100)+'%';setMsg('Processing '+(i+1)+' of '+n+': '+it.name);
+    });
+    $('bar').style.width='100%';
+    var name=($('fname').value||'images.pdf').replace(/[\\/:*?"<>|]+/g,'_');if(!/\.pdf$/i.test(name))name+='.pdf';
+    resUrl=URL.createObjectURL(blob);
+    var mb=(blob.size/1048576).toFixed(blob.size>10485760?1:2);
+    setMsg('Done: '+items.length+' page(s), '+mb+' MB');
+    var r=$('res');r.className='res';
+    if(NATIVE){
+      [['Save to phone',false],['Share / Open',true]].forEach(function(x,idx){
+        var bt=document.createElement('button');bt.type='button';bt.textContent=x[0];if(idx)bt.className='sec';
+        bt.addEventListener('click',async function(){bt.disabled=true;try{setMsg(await nativeSave(blob,name,x[1]));}catch(e){setMsg('Could not save: '+(e&&e.message?e.message:e),true);}bt.disabled=false;});
+        r.appendChild(bt);
+      });
+    }else{
+    var dl=document.createElement('a');dl.className='btn';dl.href=resUrl;dl.download=name;dl.textContent='Download PDF';r.appendChild(dl);
+    var op=document.createElement('a');op.className='btn sec';op.style.cssText='background:transparent;color:var(--ac);border:1px solid var(--bd)';op.href=resUrl;op.target='_blank';op.textContent='Open';r.appendChild(op);
+    try{
+      var file=new File([blob],name,{type:'application/pdf'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){
+        var sh=document.createElement('button');sh.className='sec';sh.textContent='Share';sh.addEventListener('click',function(){navigator.share({files:[file],title:name}).catch(function(){});});r.appendChild(sh);
+      }
+    }catch(e){}
+    }
+  }catch(e){
+    setMsg('Error: '+(e&&e.message?e.message:e),true);
+  }
+  busy=false;$('go').disabled=!items.length;
+  setTimeout(function(){$('prog').className='prog hide';},600);
+});
+
+/* ---- wiring ---- */
+var dz=$('drop'),fi=$('file');
+dz.addEventListener('click',function(){fi.click();});
+dz.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();fi.click();}});
+$('addMore').addEventListener('click',function(){fi.click();});
+$('clear').addEventListener('click',function(){items=[];render();setMsg('');});
+fi.addEventListener('change',function(){if(fi.files.length)addFiles(fi.files);fi.value='';});
+['dragenter','dragover'].forEach(function(t){document.addEventListener(t,function(e){e.preventDefault();if(e.dataTransfer&&e.dataTransfer.types&&Array.prototype.indexOf.call(e.dataTransfer.types,'Files')>=0)dz.classList.add('over');});});
+['dragleave','drop'].forEach(function(t){document.addEventListener(t,function(){dz.classList.remove('over');});});
+document.addEventListener('drop',function(e){e.preventDefault();if(e.dataTransfer&&e.dataTransfer.files&&e.dataTransfer.files.length)addFiles(e.dataTransfer.files);});
+loadS();render();
+})();
+}
+</script>
+</body>
+</html>
