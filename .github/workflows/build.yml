@@ -33,6 +33,11 @@ jobs:
           npx cap add android
           npx cap sync android
 
+      - name: Add storage permissions
+        run: |
+          sed -i 's#</manifest>#    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />\n</manifest>#' app/android/app/src/main/AndroidManifest.xml
+          grep -n "EXTERNAL_STORAGE" app/android/app/src/main/AndroidManifest.xml
+
       - name: Build debug APK
         working-directory: app/android
         run: ./gradlew assembleDebug --no-daemon
